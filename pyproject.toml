@@ -1,0 +1,24 @@
+[project]
+name = "stealth-browser"
+version = "0.1.0"
+description = "Standalone Patchright stealth browser: extensions, temporary/persistent profiles and a CDP port for Chrome DevTools MCP."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "patchright~=1.60",
+]
+
+[project.scripts]
+stealth-browser = "browser.mcp_launcher:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# src-layout: пакет лежит в src/browser, автодискавери из каталога src.
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Маркер типизации (PEP 561), чтобы потребители видели аннотации.
+[tool.setuptools.package-data]
+browser = ["py.typed"]

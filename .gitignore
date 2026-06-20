@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Артефакты сборки/упаковки
+*.egg-info/
+build/
+dist/
