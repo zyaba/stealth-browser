@@ -1,7 +1,7 @@
-"""stealth-browser — an anti-detect browser built on Patchright.
+"""stealth-browser - an anti-detect browser built on Patchright.
 
 Public API:
-    from browser import BrowserConfig, BrowserManager
+    from stealth_browser import BrowserConfig, BrowserManager
 """
 
 from __future__ import annotations

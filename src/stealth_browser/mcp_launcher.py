@@ -4,11 +4,12 @@ Launches an anti-detect browser and opens ``--remote-debugging-port``, which
 ``chrome-devtools-mcp`` connects to via ``--browserUrl``. The browser stays up
 until stopped (Ctrl+C).
 
-Run::
+``--extensions-dir`` accepts a relative path; it is resolved to absolute
+(relative to the CWD) before being passed to Chromium::
 
-    python -m browser --url "https://example.com" --port 9222
-    python -m browser --url "https://example.com" --user-data-dir ./profile
-    python -m browser --url "https://example.com" --extensions-dir ./extensions
+    stealth-browser --url "https://example.com" --port 9222
+    python -m stealth_browser --url "https://example.com" --user-data-dir ./profile
+    python -m stealth_browser --url "https://example.com" --extensions-dir ./extensions
 """
 
 from __future__ import annotations
@@ -17,6 +18,8 @@ import argparse
 import asyncio
 import contextlib
 import logging
+import signal
+from typing import Any
 
 from .config import BrowserConfig
 from .manager import BrowserManager
@@ -39,8 +42,8 @@ async def run_cdp_browser(
         target_url: First navigation target (``about:blank`` for none).
         remote_debugging_port: Remote debugging port for the MCP connection.
         block_media: Whether to block images/media/domains.
-        user_data_dir: Persistent profile (None — temporary).
-        extensions_dir: Directory with unpacked extensions (None — none;
+        user_data_dir: Persistent profile (None - temporary).
+        extensions_dir: Directory with unpacked extensions (None - none;
             extensions are not bundled with the library, the consumer provides
             the path).
     """
@@ -71,7 +74,7 @@ async def run_cdp_browser(
 
 def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="python -m browser",
+        prog="python -m stealth_browser",
         description="Patchright stealth browser with a CDP port for Chrome DevTools MCP.",
     )
     parser.add_argument("--url", default="about:blank", help="First navigation target.")
@@ -82,9 +85,22 @@ def _parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _install_termination_handler() -> None:
+    """Make SIGTERM raise ``KeyboardInterrupt`` like SIGINT, so ``kill <pid>``
+    runs the cleanup ``finally``. SIGKILL / power loss can't be handled here.
+    """
+
+    def _handler(_signum: int, _frame: Any) -> None:
+        raise KeyboardInterrupt
+
+    with contextlib.suppress(ValueError, OSError):
+        signal.signal(signal.SIGTERM, _handler)
+
+
 def main() -> None:
     """Launcher entry point."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    _install_termination_handler()
     args = _parse_arguments()
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(

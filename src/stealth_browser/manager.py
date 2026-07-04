@@ -2,13 +2,12 @@
 
 Launches an anti-detect Chromium with extensions and a temporary or persistent
 profile. A portable, self-contained implementation with no project-specific
-dependencies — suitable for reuse in other projects.
+dependencies - suitable for reuse in other projects.
 """
 
 from __future__ import annotations
 
 import logging
-import shutil
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -33,8 +32,7 @@ class BrowserManager:
     - resource blocking (images, media, fonts, domains);
     - loading unpacked extensions;
     - a temporary profile (removed on close) or a persistent one
-      (``user_data_dir`` — kept between runs);
-    - a plain (non-persistent) mode.
+      (``user_data_dir`` - kept between runs).
 
     Usage::
 
@@ -59,10 +57,9 @@ class BrowserManager:
         self._logger_prefix = f"[{logger_name}]" if logger_name else None
 
         self._playwright: Playwright | None = None
-        self._browser: Any | None = None
         self._context: BrowserContext | None = None
         self._page: Page | None = None
-        self._temp_profile_dir: str | None = None
+        self._temp_profile: tempfile.TemporaryDirectory | None = None
 
     @property
     def page(self) -> Page | None:
@@ -81,9 +78,10 @@ class BrowserManager:
     def _resolve_user_data_dir(self) -> str:
         """Return the profile directory: persistent from config, or temporary.
 
-        The temporary directory is remembered in ``_temp_profile_dir`` and
-        removed on ``close()``. A persistent one (``config.user_data_dir``) is
-        not removed.
+        Persistent (``config.user_data_dir``) is used as-is and never removed.
+        Otherwise a self-cleaning ``TemporaryDirectory`` is kept on the instance
+        as a finalizer backstop if ``close()`` is skipped (not proof against
+        SIGKILL).
         """
         if self.config.user_data_dir is not None:
             user_data_dir = Path(self.config.user_data_dir)
@@ -91,10 +89,9 @@ class BrowserManager:
             self._log("info", f"Persistent browser profile: {user_data_dir}")
             return str(user_data_dir)
 
-        temp_profile_dir = tempfile.mkdtemp(prefix="chrome_profile_")
-        self._temp_profile_dir = temp_profile_dir
-        self._log("info", f"Created temporary browser profile: {temp_profile_dir}")
-        return temp_profile_dir
+        self._temp_profile = tempfile.TemporaryDirectory(prefix="chrome_profile_")
+        self._log("info", f"Created temporary browser profile: {self._temp_profile.name}")
+        return self._temp_profile.name
 
     def _get_base_browser_args(self) -> list[str]:
         """Base Chromium launch args + ``extra_args`` from config."""
@@ -116,7 +113,7 @@ class BrowserManager:
 
         extensions = discover_extensions(self.config.extensions_dir)
         if not extensions:
-            self._log("warning", "No extensions found — launching without them")
+            self._log("warning", "No extensions found - launching without them")
             return []
 
         joined = ",".join(str(path) for path in extensions)
@@ -170,37 +167,19 @@ class BrowserManager:
 
         viewport = self._build_viewport()
 
-        # A persistent on-disk profile is only possible via a persistent
-        # context. If user_data_dir is set but persistent is off, enable it so
-        # user_data_dir is not silently ignored.
-        use_persistent = self.config.persistent_context
-        if self.config.user_data_dir is not None and not use_persistent:
-            self._log(
-                "warning",
-                "user_data_dir set with persistent_context=False — enabling "
-                "persistent context (a persistent profile requires it)",
-            )
-            use_persistent = True
-
-        if use_persistent:
-            user_data_dir = self._resolve_user_data_dir()
-            self._context = await self._playwright.chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                headless=False,
-                viewport=viewport,
-                no_viewport=self.config.no_viewport,
-                args=launch_args or None,
-            )
-            self._log("info", "Browser launched (persistent context)")
-            self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
-        else:
-            self._browser = await self._playwright.chromium.launch(headless=False, args=launch_args or None)
-            self._context = await self._browser.new_context(
-                viewport=viewport,
-                no_viewport=self.config.no_viewport,
-            )
-            self._page = await self._context.new_page()
-            self._log("info", "Browser launched (non-persistent)")
+        # Single code path: a persistent context covers both profile modes and
+        # is required to load extensions.
+        user_data_dir = self._resolve_user_data_dir()
+        self._context = await self._playwright.chromium.launch_persistent_context(
+            user_data_dir=user_data_dir,
+            headless=False,
+            viewport=viewport,
+            # without [no_viewport=True] getting cookies from qrator is not possible when [viewport] is not set
+            no_viewport=self.config.no_viewport,
+            args=launch_args or None,
+        )
+        self._log("info", "Browser launched (persistent context)")
+        self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
 
         if self._page is None:
             raise RuntimeError("Failed to create browser page")
@@ -221,12 +200,6 @@ class BrowserManager:
             except Exception as exc:
                 self._log("warning", f"Failed to close context: {exc}")
 
-        if self._browser:
-            try:
-                await self._browser.close()
-            except Exception as exc:
-                self._log("warning", f"Failed to close browser: {exc}")
-
         if self._playwright:
             try:
                 await self._playwright.stop()
@@ -238,15 +211,16 @@ class BrowserManager:
 
     def _cleanup_temp_profile(self) -> None:
         """Remove the temporary profile (leaves a persistent one untouched)."""
-        if not self._temp_profile_dir:
+        if not self._temp_profile:
             return
+        temp_path = self._temp_profile.name
         try:
-            shutil.rmtree(self._temp_profile_dir, ignore_errors=True)
-            self._log("info", f"Temporary profile removed: {self._temp_profile_dir}")
+            self._temp_profile.cleanup()
+            self._log("info", f"Temporary profile removed: {temp_path}")
         except Exception as exc:
             self._log("warning", f"Failed to remove temporary profile: {exc}")
         finally:
-            self._temp_profile_dir = None
+            self._temp_profile = None
 
     async def __aenter__(self) -> "BrowserManager":
         await self.start()

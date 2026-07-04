@@ -25,18 +25,13 @@ class BrowserConfig:
         viewport_height: Viewport height (when ``no_viewport=False``).
         extra_args: Extra Chromium launch arguments (e.g.
             ``--remote-debugging-port=9222`` for CDP/MCP).
-        persistent_context: Use a persistent context (on-disk profile) instead
-            of a plain launch + new_context. A persistent profile
-            (``user_data_dir``) is possible ONLY in this mode, so it is forced
-            on whenever ``user_data_dir`` is set.
-        user_data_dir: Browser profile directory. When set, browser data
-            (cookies, storage, cache) persists between runs (PERSISTENT storage)
-            and the persistent context is enabled automatically. When ``None``
-            and ``persistent_context=True``, a temporary profile is created and
-            removed on close (EPHEMERAL storage).
+        user_data_dir: Browser profile directory. When set, data persists
+            between runs (PERSISTENT); when ``None`` a temporary profile is
+            created and removed on close (EPHEMERAL). The context is always
+            persistent - this only sets on-disk vs temporary.
         extensions_dir: Directory with unpacked extensions. When set, extensions
             from it are loaded; when ``None`` the browser starts without
-            extensions. Extensions are NOT bundled with the library — the path
+            extensions. Extensions are NOT bundled with the library - the path
             is provided by the consumer.
         blocked_resource_types: Resource types to block when
             ``block_media=True``.
@@ -54,7 +49,6 @@ class BrowserConfig:
     viewport_width: int = DEFAULT_VIEWPORT_WIDTH
     viewport_height: int = DEFAULT_VIEWPORT_HEIGHT
     extra_args: list[str] | None = None
-    persistent_context: bool = True
     user_data_dir: str | Path | None = None
     extensions_dir: str | Path | None = None
     blocked_resource_types: tuple[str, ...] = DEFAULT_BLOCKED_RESOURCE_TYPES

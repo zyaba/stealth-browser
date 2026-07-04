@@ -3,10 +3,10 @@
 Run as a regular CONSUMER of the installed package, not from the library
 directory:
 
-    uv pip install <path-to-browser>     # or: pip install stealth-browser
+    uv pip install <path-to-stealth-browser>   # or: pip install stealth-browser
     python example.py
 
-Imports here are absolute (`from browser...`); the package comes from the
+Imports here are absolute (`from stealth_browser...`); the package comes from the
 environment. The profile and extensions directories are paths owned by the
 consumer; the library never writes into its own directory. When no profile is
 set, the browser uses a directory in the system temp and removes it on close.
@@ -17,9 +17,9 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from browser import BrowserConfig, BrowserManager
+from stealth_browser import BrowserConfig, BrowserManager
 
-# Data directories are chosen by the consumer — intentionally OUTSIDE the library package.
+# Data directories are chosen by the consumer - intentionally OUTSIDE the library package.
 DATA_DIR = Path.home() / ".cache" / "stealth-browser-demo"
 
 
@@ -27,7 +27,7 @@ async def temporary_profile() -> None:
     """Temporary profile (default behavior).
 
     With ``user_data_dir=None`` the manager creates a profile in the system
-    temp (``tempfile.mkdtemp``) and removes it on close — nothing is left on
+    temp (``tempfile.mkdtemp``) and removes it on close - nothing is left on
     disk and nothing is written into the library directory.
     """
     async with BrowserManager(BrowserConfig()) as browser:

@@ -1,73 +1,77 @@
 # stealth-browser
 
-A standalone library for launching an anti-detect browser on
-[Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) (a Playwright
-fork). Portable across projects: no external dependencies beyond Patchright.
+[![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](https://www.python.org/)
+[![Version](https://img.shields.io/badge/version-0.2.0-informational.svg)](pyproject.toml)
+[![Built on Patchright](https://img.shields.io/badge/built%20on-Patchright-8A2BE2.svg)](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright)
 
-Features:
-- stealth Chromium launch (Patchright anti-detect);
-- loading unpacked extensions from a given path (`extensions_dir`);
-- a **temporary** profile (removed on close) or a **persistent** one
-  (`user_data_dir` — cookies/storage/cache persist between runs);
-- resource blocking by type (image/media/font) and by domain;
-- opening a CDP port for control via **Chrome DevTools MCP**.
+A standalone, portable Python library for launching an **anti-detect Chromium**
+browser on [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) (a
+Playwright fork). Drive it from code with a small async API, or run it as a CLI
+that opens a CDP port for [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp).
 
-> Headless is intentionally not used: Patchright always launches the browser
-> headed (harder to detect). To hide the window on a server/Linux, run it under
-> `xvfb-run` (see below).
+## Why use it
+
+- **Stealth by default** - launches Chromium with Patchright's anti-detect
+  patches, harder to fingerprint than vanilla Playwright.
+- **Portable** - a single dependency (Patchright); drop it into any project.
+- **Flexible profiles** - a temporary profile that is wiped on close, or a
+  persistent one that keeps cookies/storage/cache between runs.
+- **Unpacked extensions** - load your own extensions (e.g. an ad blocker) from a
+  directory you control.
+- **Faster, quieter pages** - block images/media/fonts and specific domains
+  (analytics, ads) out of the box.
+- **MCP-ready** - opens a remote-debugging (CDP) port so `chrome-devtools-mcp`
+  can drive the browser via `--browserUrl`.
+
+> Headless is intentionally never used: Patchright always launches headed (it is
+> harder to detect). To hide the window on a server, run under `xvfb-run` - see
+> [Running headless on Linux/VPS](#running-headless-on-linuxvps).
+
+## Requirements
+
+- Python **>= 3.10**
+- [`patchright`](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) `~=1.60`
+  (installed automatically as a dependency)
+- A Chromium binary for Patchright (installed once per machine, see below)
 
 ## Installation
 
-In all cases the Chromium binary for Patchright is needed once. By default it is
-placed in a shared per-user cache (`~/.cache/ms-playwright`) and reused by all
-environments — usually one install per machine is enough:
+The Chromium binary for Patchright is needed once. By default it lands in a
+shared per-user cache (`~/.cache/ms-playwright`) and is reused everywhere:
 
 ```bash
 patchright install chromium      # or: uv run patchright install chromium
 ```
 
-### Option 1 — as a dependency of a consumer project
+### Option 1 - as a dependency of your project
 
-Install the library into the consumer's environment. Both the CLI
-(`python -m browser`) and code imports (`from browser.manager import BrowserManager`)
-become available.
+Install into your project's environment. Both the CLI
+(`python -m stealth_browser`) and imports
+(`from stealth_browser import BrowserManager`) become available.
 
 ```bash
-# from the consumer's environment (the browser/ repo sits nearby)
-uv pip install -e <path-to-browser>     # editable — imports from the working copy, edits apply immediately
-# or a regular install (snapshot in site-packages, edits not seen until reinstall):
-uv pip install <path-to-browser>
+uv pip install -e <path-to-stealth-browser>   # editable - edits apply immediately
+uv pip install <path-to-stealth-browser>      # regular snapshot install
 ```
 
-Run (with the consumer environment active; in a uv project — via `uv run`):
+### Option 2 - globally as a CLI tool
+
+An isolated install after which the `stealth-browser` command works from any
+directory without activating a venv. Good for ad-hoc launches; not suitable for
+`import stealth_browser` in your code - use Option 1 for that.
 
 ```bash
-python -m browser --url "https://example.com" --port 9222
-# uv project: uv run python -m browser --url "https://example.com" --port 9222
-```
-
-### Option 2 — globally as a CLI tool
-
-An isolated install after which the `stealth-browser` command is available
-**from any directory without activating a venv**. Good for ad-hoc launches of
-the browser; not suitable for `import browser` in your code — use Option 1 for
-that.
-
-```bash
-uv tool install <path-to-browser>       # or: pipx install <path-to-browser>
+uv tool install <path-to-stealth-browser>     # or: pipx install <path-to-stealth-browser>
 stealth-browser --url "https://example.com" --port 9222
 ```
 
-> To develop the library itself: from the repo run `uv venv && uv pip install -e .`,
-> then `uv run python -m browser --url ...` (uses the local `.venv`).
+## Quick start
 
-## Use as a library
-
-Install the package (see "Installation") and import the public API:
+### Use as a library
 
 ```python
 import asyncio
-from browser import BrowserConfig, BrowserManager
+from stealth_browser import BrowserConfig, BrowserManager
 
 
 async def main():
@@ -85,109 +89,118 @@ async def main():
 asyncio.run(main())
 ```
 
-Equivalent submodule imports:
+More examples live in [`examples/example.py`](examples/example.py).
 
-```python
-from browser.config import BrowserConfig
-from browser.manager import BrowserManager
+### Use as a CLI
+
+```bash
+# temporary profile + CDP port for MCP
+python -m stealth_browser --url "https://example.com" --port 9222
+
+# persistent profile
+python -m stealth_browser --url "https://example.com" --user-data-dir ./profile
+
+# with unpacked extensions (each in its own subfolder)
+python -m stealth_browser --url "https://example.com" --extensions-dir ./extensions
+
+# do not block media/analytics (full Network picture)
+python -m stealth_browser --url "https://example.com" --show-media
 ```
 
-Examples — `examples/example.py`.
+The browser stays open until you stop it with `Ctrl+C`.
 
-### Configuration (`BrowserConfig`)
+| Flag | Default | Purpose |
+|---|---|---|
+| `--url` | `about:blank` | first navigation target |
+| `--port` | `9222` | CDP remote-debugging port |
+| `--user-data-dir` | *(temporary)* | persistent profile directory |
+| `--extensions-dir` | *(none)* | directory of unpacked extensions |
+| `--show-media` | off | do not block media/domains |
+
+## Configuration
+
+`BrowserConfig` controls how the browser launches:
 
 | Field | Default | Purpose |
 |---|---|---|
-| `block_media` | `True` | block image/media/font and `blocked_domains` |
+| `block_media` | `True` | block image/media/font resources and `blocked_domains` |
 | `no_viewport` | `False` | disable the fixed viewport |
 | `viewport_width` / `viewport_height` | `1920` / `1080` | viewport size |
 | `extra_args` | `None` | extra Chromium args (e.g. `--remote-debugging-port=9222`) |
-| `persistent_context` | `True` | on-disk profile vs plain launch |
 | `user_data_dir` | `None` | persistent profile directory; `None` → temporary |
-| `extensions_dir` | `None` | extensions directory; `None` → no extensions |
-| `blocked_resource_types` | `("image","media","font")` | resource types to block |
+| `extensions_dir` | `None` | unpacked-extensions directory; `None` → no extensions |
+| `blocked_resource_types` | `("image", "media", "font")` | resource types to block |
 | `blocked_domains` | `()` | domain substrings to block |
 
 ### Extensions
 
-Extensions are **not bundled** with the library. To load some (e.g. uBlock
-Origin Lite), point to a directory of unpacked extensions via
-`BrowserConfig(extensions_dir=...)` or the launcher's `--extensions-dir` flag.
-When `extensions_dir` is not set, the browser starts without extensions. Inside
-the directory each extension is a separate subfolder (an unpacked crx).
+Extensions are **not** bundled with the library. Point `extensions_dir` (or the
+`--extensions-dir` flag) at a directory of unpacked extensions, each in its own
+subfolder. When unset, the browser starts without extensions.
 
 ## CDP port for Chrome DevTools MCP
 
-The launcher starts the browser and opens a remote debugging port, which
-`chrome-devtools-mcp` connects to via `--browserUrl`:
+The launcher opens a remote-debugging port that `chrome-devtools-mcp` connects
+to via `--browserUrl`:
 
 ```bash
-# temporary profile
-python -m browser --url "https://example.com" --port 9222
-
-# persistent profile
-python -m browser --url "https://example.com" --user-data-dir ./profile
-
-# with extensions from a directory (unpacked, each in its own subfolder)
-python -m browser --url "https://example.com" --extensions-dir ./extensions
-
-# show media/analytics (full Network picture)
-python -m browser --url "https://example.com" --show-media
+python -m stealth_browser --url "https://example.com" --port 9222
 ```
 
-> Commands work from any directory (CWD does not matter) — given an active
-> environment where the package is installed (Option 1), or a global
-> `stealth-browser` install (Option 2). Inside the library repo — via
-> `uv run python -m browser ...` (local `.venv`).
+Then point the MCP server at `--browserUrl=http://127.0.0.1:9222`.
 
-The browser stays open until stopped with `Ctrl+C`. Point the MCP server at
-`--browserUrl=http://127.0.0.1:9222`.
+### Multiple instances
 
-Hide the window on Linux/VPS:
+Run several browsers on different ports. The MCP server takes a static port from
+`--browserUrl`, so the launcher's `--port` must match the target server:
 
 ```bash
-xvfb-run -a -s '-screen 0 1920x1080x24' python -m browser --url "https://example.com"
+python -m stealth_browser --url "<url1>" --port 9222   # → chrome-devtools-9222
+python -m stealth_browser --url "<url2>" --port 9223   # → chrome-devtools-9223
 ```
 
-## Layout
+Use different `--user-data-dir` values to isolate data across parallel
+instances.
+
+## Running headless on Linux/VPS
+
+Patchright always launches headed. To hide the window on a server, wrap it with
+Xvfb:
+
+```bash
+xvfb-run -a -s '-screen 0 1920x1080x24' python -m stealth_browser --url "https://example.com"
+```
+
+## Project layout
 
 ```
 .
-├── src/browser/
+├── src/stealth_browser/
 │   ├── __init__.py     # public API: BrowserConfig, BrowserManager, __version__
-│   ├── config.py       # BrowserConfig
-│   ├── manager.py      # BrowserManager (launch/close, profiles, blocking)
+│   ├── config.py       # BrowserConfig dataclass
+│   ├── manager.py      # BrowserManager: launch/close, profiles, blocking
 │   ├── extensions.py   # unpacked-extension discovery
-│   ├── mcp_launcher.py # launch the browser with a CDP port
-│   ├── __main__.py     # python -m browser
-│   └── py.typed        # typing marker (PEP 561)
+│   ├── mcp_launcher.py # CLI entry point; opens a CDP port
+│   ├── __main__.py     # python -m stealth_browser
+│   └── py.typed        # PEP 561 typing marker
 ├── examples/
-│   └── example.py      # example of using the installed package
+│   └── example.py
 ├── pyproject.toml
 └── README.md
 ```
 
-## Multi-instance (several browsers)
+## Getting help
 
-The launcher supports running several browsers on different CDP ports via
-`--port`. `chrome-devtools-mcp` takes the port from `--browserUrl` (static), so
-the launcher's port must match the port of the target MCP server:
+- Browse the runnable [`examples/`](examples/) for common setups.
+- For the underlying browser automation API, see the
+  [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) and
+  [Playwright for Python](https://playwright.dev/python/) docs.
+- For MCP integration, see
+  [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp).
+- Found a bug or have a question? Open an issue in the project's issue tracker.
 
-```bash
-python -m browser --url "<url1>" --port 9222   # → chrome-devtools-9222
-python -m browser --url "<url2>" --port 9223   # → chrome-devtools-9223
-```
+## License
 
-For data isolation across parallel instances, use different `--user-data-dir`.
-
-## Agent usage and consumers
-
-Everything an agent needs to drive the browser (steering policy,
-`settings/mcp.json` with `chrome-devtools` servers, helper scripts, custom
-agents/hooks) lives in the **consumer project**, in its own `.kiro/`. The
-library itself ships no Kiro context.
-
-To make the library importable for a consumer, install it as a package
-(`uv pip install -e <path-to-browser>`) or put `browser/` on `PYTHONPATH`. Kiro
-context is loaded per workspace, not via the Python import — so MCP/steering
-stay with the consumer, not in this library.
+No license file is currently included in this repository. Until one is added,
+usage and distribution rights are not formally granted - please contact the
+maintainers before relying on it in production.

@@ -13,17 +13,19 @@ def discover_extensions(extensions_dir: str | Path | None) -> list[Path]:
 
     Args:
         extensions_dir: Directory with extensions. Extensions are not bundled
-            with the library — the path is provided by the consumer. When
+            with the library - the path is provided by the consumer. When
             ``None``, no extensions are loaded.
 
     Returns:
-        List of paths to extension subdirectories (empty if the directory is
-        not set or does not exist).
+        List of ABSOLUTE paths to extension subdirectories (empty if the
+        directory is not set or does not exist). Paths are resolved to absolute
+        because Chromium resolves a relative ``--load-extension`` against its
+        own binary directory (not the CWD), which would break loading.
     """
     if extensions_dir is None:
-        logger.debug("Extensions directory not set — no extensions loaded.")
+        logger.debug("Extensions directory not set - no extensions loaded.")
         return []
-    base = Path(extensions_dir)
+    base = Path(extensions_dir).resolve()
     if not base.is_dir():
         logger.warning("Extensions directory not found: %s", base)
         return []
