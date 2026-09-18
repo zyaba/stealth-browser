@@ -1,6 +1,6 @@
 [project]
 name = "stealth-browser"
-version = "0.3.0"
+version = "0.3.1"
 description = "Standalone Patchright stealth browser: extensions, temporary/persistent profiles and a CDP port for Chrome DevTools MCP."
 readme = "README.md"
 requires-python = ">=3.10"

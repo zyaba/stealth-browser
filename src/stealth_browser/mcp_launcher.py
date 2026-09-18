@@ -38,7 +38,7 @@ DEFAULT_URL = lifecycle.DEFAULT_URL
 
 logger = logging.getLogger(__name__)
 
-_SUBCOMMANDS = ("run", "start", "stop", "status")
+_SUBCOMMANDS = ("run", "start", "stop", "status", "mcp-config")
 _TOP_LEVEL_OPTIONS = ("-h", "--help", "--version")
 
 
@@ -124,10 +124,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command")
 
-    run_parser = subparsers.add_parser("run", help="Launch in the foreground until Ctrl+C (default).")
+    _mcp_hint = ("After the browser is up, attach an MCP server to the same port: "
+                 "run `stealth-browser mcp-config --port <port>` for a ready-to-paste config.")
+
+    run_parser = subparsers.add_parser("run", help="Launch in the foreground until Ctrl+C (default).",
+                                       epilog=_mcp_hint)
     _add_launch_arguments(run_parser)
 
-    start_parser = subparsers.add_parser("start", help="Launch a detached instance on a CDP port.")
+    start_parser = subparsers.add_parser("start", help="Launch a detached instance on a CDP port.",
+                                         epilog=_mcp_hint)
     _add_launch_arguments(start_parser)
     start_parser.add_argument("--pid-file", default=None, help="Launcher PID file (default: .stealth-browser/browser-<port>.pid).")
     start_parser.add_argument("--log-file", default=None, help="Child log file (default: .stealth-browser/browser-<port>.out).")
@@ -137,6 +142,16 @@ def _build_parser() -> argparse.ArgumentParser:
 
     status_parser = subparsers.add_parser("status", help="Report CDP liveness + launcher PID.")
     _add_lifecycle_arguments(status_parser)
+
+    mcp_parser = subparsers.add_parser(
+        "mcp-config",
+        help="Print a chrome-devtools-mcp config that attaches to this port.",
+    )
+    mcp_parser.add_argument("--port", type=_port_type, default=DEFAULT_REMOTE_DEBUGGING_PORT, help="CDP port to attach to.")
+    mcp_parser.add_argument("--name", default=lifecycle.MCP_DEFAULT_NAME, help="MCP server name.")
+    mcp_parser.add_argument("--format", default="opencode",
+                            choices=["opencode", "mcpServers", "args"],
+                            help="Config schema: opencode | mcpServers (Claude/Cursor/Kiro) | args.")
 
     return parser
 
@@ -199,6 +214,8 @@ def main() -> None:
         raise SystemExit(lifecycle.cmd_stop(port=args.port, pid_file=args.pid_file))
     if args.command == "status":
         raise SystemExit(lifecycle.cmd_status(port=args.port, pid_file=args.pid_file))
+    if args.command == "mcp-config":
+        raise SystemExit(lifecycle.cmd_mcp_config(port=args.port, name=args.name, fmt=args.format))
 
     raise SystemExit(_run_foreground(args))
 

@@ -18,6 +18,7 @@ process tree is terminated.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import signal
@@ -32,6 +33,12 @@ from typing import Any
 
 DEFAULT_PORT = 9222
 DEFAULT_URL = "about:blank"
+
+# Recommended chrome-devtools-mcp flags. --no-usage-statistics opts out of the
+# server's Google telemetry; it attaches to the stealth browser via --browserUrl
+# rather than launching its own vanilla Chrome.
+MCP_PACKAGE = "chrome-devtools-mcp@latest"
+MCP_DEFAULT_NAME = "chrome-devtools"
 
 # Per-project runtime state dir (pid files + launcher logs), relative to the CWD.
 _STATE_DIR = ".stealth-browser"
@@ -470,4 +477,39 @@ def cmd_status(port: int, pid_file: str | Path | None) -> int:
         print(f"pid={launcher} (running)")
     else:
         print(f"pid={launcher} (pid reused; not this launcher)")
+    return 0
+
+
+def mcp_server_args(port: int) -> list[str]:
+    """chrome-devtools-mcp launch args that attach to the stealth browser on
+    ``port`` with Google usage statistics disabled (see MCP_PACKAGE)."""
+    return [
+        "npx",
+        "-y",
+        MCP_PACKAGE,
+        f"--browserUrl=http://127.0.0.1:{port}",
+        "--no-usage-statistics",
+    ]
+
+
+def cmd_mcp_config(port: int, name: str, fmt: str) -> int:
+    """Print a ready-to-paste chrome-devtools-mcp config for ``port``.
+
+    The MCP attaches to a running ``stealth-browser start --port <port>``; it
+    does not launch its own browser. ``fmt`` selects the client schema.
+    """
+    args = mcp_server_args(port)
+    if fmt == "opencode":
+        block = {"mcp": {name: {"type": "local", "command": args, "enabled": True}}}
+    elif fmt == "mcpServers":
+        # Claude / Cursor / Kiro (.kiro/settings/mcp.json) shape.
+        block = {"mcpServers": {name: {"command": args[0], "args": args[1:]}}}
+    elif fmt == "args":
+        print(" ".join(args))
+        return 0
+    else:
+        print(f"ERROR: unknown format {fmt!r} (use: opencode, mcpServers, args)",
+              file=sys.stderr)
+        return 2
+    print(json.dumps(block, indent=2))
     return 0

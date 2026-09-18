@@ -1,7 +1,7 @@
 # stealth-browser
 
 [![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue.svg)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-0.3.0-informational.svg)](pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.3.1-informational.svg)](pyproject.toml)
 [![Built on Patchright](https://img.shields.io/badge/built%20on-Patchright-8A2BE2.svg)](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright)
 
 A small, portable Python library and CLI for launching an **anti-detect Chromium** on [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright) (a Playwright fork). Drive it from an async API, or run it as a CLI that opens a CDP port for [Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp).
@@ -74,6 +74,34 @@ Good to know:
 - `start` refuses if the port already serves CDP or is held by another process.
 - `stop` finds the CDP port owner via the OS socket table and kills its process tree (never `pkill -f`); a recorded PID is only killed after its command line is verified, so PID reuse can't hit an unrelated process.
 
+### Chrome DevTools MCP
+
+`chrome-devtools-mcp` drives the browser but must **attach** to the running stealth instance (it otherwise launches its own vanilla Chrome). Generate a ready-to-paste config — telemetry off, pointed at your port — instead of hand-writing flags:
+
+```bash
+stealth-browser start --port 9222 --show-media       # 1. bring the browser up
+stealth-browser mcp-config --port 9222               # 2. print the MCP config
+```
+
+`mcp-config` emits `--browserUrl=http://127.0.0.1:<port>` and `--no-usage-statistics` (opts out of the MCP server's Google telemetry). Pick the client schema with `--format`:
+
+- `opencode` (default) — the `mcp` block for `opencode.jsonc`
+- `mcpServers` — Claude / Cursor / Kiro (`.kiro/settings/mcp.json`)
+- `args` — the bare `npx …` command line
+
+A static copy for opencode lives at [`examples/chrome-devtools-mcp.jsonc`](examples/chrome-devtools-mcp.jsonc).
+
+### Shared agent policy (skill)
+
+[`examples/browser-automation.SKILL.md`](examples/browser-automation.SKILL.md) is the canonical, project-agnostic browser-automation policy (start/stop/status, attach-not-launch, never `pkill -f`, context discipline). Install it once as a global opencode skill so agents load it on demand without a per-repo copy:
+
+```bash
+# copy to the global skills dir, then restart opencode
+cp examples/browser-automation.SKILL.md ~/.config/opencode/skill/browser-automation/SKILL.md
+```
+
+Projects that drive a browser keep only a small `browser-automation.md` delta (their port, target site, selectors, login) that defers to this skill.
+
 ## Options
 
 ### CLI flags
@@ -88,7 +116,7 @@ Good to know:
 | `--pid-file` | start, stop, status | `.stealth-browser/browser-<port>.pid` | launcher PID file |
 | `--log-file` | start | `.stealth-browser/browser-<port>.out` | detached child log |
 
-Also: `stealth-browser --version`, and `stealth-browser <command> -h` for per-command help.
+Also: `stealth-browser mcp-config` (see above), `stealth-browser --version`, and `stealth-browser <command> -h` for per-command help.
 
 ### `BrowserConfig`
 

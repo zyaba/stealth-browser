@@ -1,0 +1,28 @@
+// Copyable Chrome DevTools MCP config for opencode (opencode.jsonc → "mcp").
+//
+// It ATTACHES to a running stealth browser (does not launch its own Chrome), so
+// start one first on the same port:
+//
+//   stealth-browser start --port 9222 --show-media
+//
+// --no-usage-statistics opts out of the MCP server's Google telemetry.
+// The launcher port MUST match --browserUrl (chrome-devtools-mcp reads it
+// statically). Regenerate for another port / client with:
+//
+//   stealth-browser mcp-config --port <port> [--format opencode|mcpServers|args]
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "chrome-devtools": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--browserUrl=http://127.0.0.1:9222",
+        "--no-usage-statistics"
+      ],
+      "enabled": true
+    }
+  }
+}
