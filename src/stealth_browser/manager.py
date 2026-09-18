@@ -22,8 +22,6 @@ from patchright.async_api import (
 from .config import BrowserConfig
 from .extensions import discover_extensions
 
-logger = logging.getLogger(__name__)
-
 
 class BrowserManager:
     """Manages the lifecycle of a Patchright stealth browser.
@@ -71,9 +69,9 @@ class BrowserManager:
         """Current browser context."""
         return self._context
 
-    def _log(self, level: str, message: str, **kwargs: Any) -> None:
+    def _log(self, level: str, message: str) -> None:
         prefixed = f"{self._logger_prefix} {message}" if self._logger_prefix else message
-        getattr(self._logger, level)(prefixed, **kwargs)
+        getattr(self._logger, level)(prefixed)
 
     def _resolve_user_data_dir(self) -> str:
         """Return the profile directory: persistent from config, or temporary.
@@ -157,7 +155,9 @@ class BrowserManager:
             The browser page.
 
         Raises:
-            RuntimeError: If the page could not be created.
+            Exception: Whatever the launch raises - Playwright and any temporary
+                profile are cleaned up before propagating, so a failed start
+                leaves no dangling driver or profile on disk.
         """
         self._log("info", "Launching browser")
         self._playwright = await async_playwright().start()
@@ -167,24 +167,29 @@ class BrowserManager:
 
         viewport = self._build_viewport()
 
-        # Single code path: a persistent context covers both profile modes and
-        # is required to load extensions.
-        user_data_dir = self._resolve_user_data_dir()
-        self._context = await self._playwright.chromium.launch_persistent_context(
-            user_data_dir=user_data_dir,
-            headless=False,
-            viewport=viewport,
-            # without [no_viewport=True] getting cookies from qrator is not possible when [viewport] is not set
-            no_viewport=self.config.no_viewport,
-            args=launch_args or None,
-        )
+        try:
+            # Single code path: a persistent context covers both profile modes
+            # and is required to load extensions.
+            user_data_dir = self._resolve_user_data_dir()
+            self._context = await self._playwright.chromium.launch_persistent_context(
+                user_data_dir=user_data_dir,
+                headless=False,
+                viewport=viewport,
+                # DO NOT REMOVE: this is a load-bearing anti-bot workaround, not a
+                # redundant passthrough. With a fixed [viewport] set,
+                # [no_viewport=True] is required for qrator-protected sites (e.g.
+                # pari.ru) to issue cookies; dropping it breaks those sites.
+                no_viewport=self.config.no_viewport,
+                args=launch_args,
+            )
+            self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
+            await self._setup_media_blocking()
+        except Exception:
+            await self.close()
+            raise
+
         self._log("info", "Browser launched (persistent context)")
-        self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
-
-        if self._page is None:
-            raise RuntimeError("Failed to create browser page")
-
-        await self._setup_media_blocking()
+        assert self._page is not None
         return self._page
 
     async def close(self) -> None:

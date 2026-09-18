@@ -2,7 +2,11 @@
 __pycache__/
 *.pyc
 
-# Артефакты сборки/упаковки
+# Build/packaging artifacts
 *.egg-info/
 build/
 dist/
+
+# Lifecycle scratch created in the CWD by ``start``/``stop`` (pid files, logs)
+# when running from this repo while developing. Real consumers get their own.
+.stealth-browser/

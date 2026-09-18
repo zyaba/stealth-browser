@@ -1,4 +1,4 @@
-"""Точка входа ``python -m stealth_browser`` - запуск CDP-браузера для MCP."""
+"""Entry point for ``python -m stealth_browser`` - launches the CDP browser for MCP."""
 
 from .mcp_launcher import main
 

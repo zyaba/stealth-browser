@@ -29,4 +29,4 @@ def discover_extensions(extensions_dir: str | Path | None) -> list[Path]:
     if not base.is_dir():
         logger.warning("Extensions directory not found: %s", base)
         return []
-    return [item for item in base.iterdir() if item.is_dir()]
+    return sorted(item for item in base.iterdir() if item.is_dir())
