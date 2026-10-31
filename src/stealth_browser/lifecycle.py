@@ -18,6 +18,7 @@ process tree is terminated.
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import re
@@ -40,6 +41,14 @@ DEFAULT_URL = "about:blank"
 MCP_PACKAGE = "chrome-devtools-mcp@latest"
 MCP_DEFAULT_NAME = "chrome-devtools"
 
+# Proxy URL source for ``run``/``start``. ``start`` hands the proxy to its
+# detached child through this variable, never on the command line, so
+# credentials do not show up in process listings.
+PROXY_ENV_VAR = "STEALTH_BROWSER_PROXY"
+
+# Opener for loopback CDP probes that ignores HTTP(S)_PROXY and system proxies.
+_DIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
 # Per-project runtime state dir (pid files + launcher logs), relative to the CWD.
 _STATE_DIR = ".stealth-browser"
 
@@ -60,12 +69,16 @@ def default_log_file(port: int) -> Path:
 
 
 def cdp_alive(port: int) -> bool:
-    """Whether a CDP endpoint answers on ``127.0.0.1:<port>``."""
+    """Whether a CDP endpoint answers on ``127.0.0.1:<port>``.
+
+    The probe never goes through a proxy: ``urlopen`` would otherwise honor
+    ``HTTP_PROXY`` (and crash on a malformed one) for a loopback address.
+    """
     url = f"http://127.0.0.1:{port}/json/version"
     try:
-        with urllib.request.urlopen(url, timeout=2) as response:
+        with _DIRECT_OPENER.open(url, timeout=2) as response:
             return response.status == 200
-    except (urllib.error.URLError, OSError, ValueError):
+    except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError):
         return False
 
 
@@ -135,8 +148,13 @@ def _port_owner_pid_posix(port: int) -> int | None:
 
 def spawn_detached(port: int, url: str, user_data_dir: str | None,
                    extensions_dir: str | None, show_media: bool,
-                   log_file: Path) -> int:
-    """Launch a detached ``run`` child; return the launcher PID."""
+                   log_file: Path, proxy: str | None = None,
+                   proxy_bypass: str | None = None) -> int:
+    """Launch a detached ``run`` child; return the launcher PID.
+
+    The proxy URL travels in the child's environment (``PROXY_ENV_VAR``), not
+    in its argv, so credentials stay out of process listings.
+    """
     command = [
         sys.executable,
         "-m",
@@ -153,6 +171,14 @@ def spawn_detached(port: int, url: str, user_data_dir: str | None,
         command += ["--extensions-dir", extensions_dir]
     if show_media:
         command.append("--show-media")
+    if proxy_bypass:
+        command += ["--proxy-bypass", proxy_bypass]
+
+    child_env = os.environ.copy()
+    if proxy:
+        child_env[PROXY_ENV_VAR] = proxy
+    else:
+        child_env.pop(PROXY_ENV_VAR, None)
 
     log_file.parent.mkdir(parents=True, exist_ok=True)
     log_handle = open(log_file, "ab")
@@ -161,6 +187,7 @@ def spawn_detached(port: int, url: str, user_data_dir: str | None,
         "stdin": subprocess.DEVNULL,
         "stdout": log_handle,
         "stderr": log_handle,
+        "env": child_env,
     }
     if os.name == "nt":
         kwargs["creationflags"] = (
@@ -350,8 +377,18 @@ def _wait_until(predicate: Callable[[], bool], timeout: float) -> bool:
 
 def cmd_start(port: int, url: str, user_data_dir: str | None,
               extensions_dir: str | None, show_media: bool,
-              pid_file: str | Path | None, log_file: str | Path | None) -> int:
+              pid_file: str | Path | None, log_file: str | Path | None,
+              proxy: str | None = None, proxy_bypass: str | None = None) -> int:
     """Start one instance on ``port``; refuse if the port is already in use."""
+    if proxy:
+        # Fail fast in the foreground instead of in the detached child's log.
+        from .proxy import build_proxy_settings
+
+        try:
+            build_proxy_settings(proxy, proxy_bypass)
+        except ValueError as error:
+            print(f"ERROR: {error}", file=sys.stderr)
+            return 1
     pid_file = Path(pid_file) if pid_file else default_pid_file(port)
     log_file = Path(log_file) if log_file else default_log_file(port)
 
@@ -371,7 +408,8 @@ def cmd_start(port: int, url: str, user_data_dir: str | None,
     # Capture the log size BEFORE spawning so the readiness scan starts at the
     # right offset (a previous run's READY line must not count).
     offset = log_file.stat().st_size if log_file.exists() else 0
-    pid = spawn_detached(port, url, user_data_dir, extensions_dir, show_media, log_file)
+    pid = spawn_detached(port, url, user_data_dir, extensions_dir, show_media, log_file,
+                         proxy=proxy, proxy_bypass=proxy_bypass)
     pid_file.parent.mkdir(parents=True, exist_ok=True)
     pid_file.write_text(f"{pid}\n")
     print(f"launched pid={pid} (log: {log_file})")

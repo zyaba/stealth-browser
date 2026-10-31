@@ -16,11 +16,13 @@ from patchright.async_api import (
     BrowserContext,
     Page,
     Playwright,
+    ProxySettings,
     async_playwright,
 )
 
 from .config import BrowserConfig
 from .extensions import discover_extensions
+from .proxy import build_proxy_settings
 
 
 class BrowserManager:
@@ -143,6 +145,20 @@ class BrowserManager:
             f"{len(self.config.blocked_domains)} domains",
         )
 
+    def _build_proxy(self) -> ProxySettings | None:
+        """Playwright ``proxy`` settings from ``config.proxy`` (or ``None``).
+
+        Raises:
+            ValueError: If ``config.proxy`` is malformed (see
+                :func:`build_proxy_settings`).
+        """
+        if not self.config.proxy:
+            return None
+        settings = build_proxy_settings(self.config.proxy, self.config.proxy_bypass)
+        auth = " with credentials" if "username" in settings else ""
+        self._log("info", f"Proxy: {settings['server']}{auth}")
+        return ProxySettings(**settings)
+
     def _build_viewport(self) -> dict[str, int] | None:
         if self.config.no_viewport:
             return None
@@ -159,6 +175,9 @@ class BrowserManager:
                 profile are cleaned up before propagating, so a failed start
                 leaves no dangling driver or profile on disk.
         """
+        # Validate the proxy first: a bad URL fails with nothing to clean up.
+        proxy = self._build_proxy()
+
         self._log("info", "Launching browser")
         self._playwright = await async_playwright().start()
 
@@ -181,6 +200,7 @@ class BrowserManager:
                 # pari.ru) to issue cookies; dropping it breaks those sites.
                 no_viewport=self.config.no_viewport,
                 args=launch_args,
+                proxy=proxy,
             )
             self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
             await self._setup_media_blocking()

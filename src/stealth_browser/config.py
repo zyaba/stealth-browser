@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_VIEWPORT_WIDTH = 1920
@@ -36,6 +36,15 @@ class BrowserConfig:
         blocked_resource_types: Resource types to block when
             ``block_media=True``.
         blocked_domains: Domain substrings to block (analytics, ads).
+        proxy: Proxy for all browser traffic as a URL,
+            ``scheme://[user:password@]host:port`` or
+            ``scheme://host:port:user:password`` (``http``, ``https``,
+            ``socks4``, ``socks5``). Percent-encode special characters in the
+            credentials of the ``@`` form. SOCKS proxies cannot take
+            credentials (Chromium limitation). ``None`` - direct connection.
+            Hidden from ``repr``.
+        proxy_bypass: Comma-separated hosts that skip the proxy, e.g.
+            ``".example.com, localhost"``.
 
     Note:
         Headless mode is intentionally never set. Patchright (an anti-detect
@@ -53,3 +62,5 @@ class BrowserConfig:
     extensions_dir: str | Path | None = None
     blocked_resource_types: tuple[str, ...] = DEFAULT_BLOCKED_RESOURCE_TYPES
     blocked_domains: tuple[str, ...] = ()
+    proxy: str | None = field(default=None, repr=False)
+    proxy_bypass: str | None = None

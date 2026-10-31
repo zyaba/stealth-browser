@@ -25,6 +25,7 @@ import argparse
 import asyncio
 import contextlib
 import logging
+import os
 import signal
 import sys
 from typing import Any
@@ -55,6 +56,8 @@ async def run_cdp_browser(
     block_media: bool = True,
     user_data_dir: str | None = None,
     extensions_dir: str | None = None,
+    proxy: str | None = None,
+    proxy_bypass: str | None = None,
 ) -> None:
     """Launch a browser with a CDP port and keep it open until cancelled.
 
@@ -69,12 +72,16 @@ async def run_cdp_browser(
         extensions_dir: Directory with unpacked extensions (None - none;
             extensions are not bundled with the library, the consumer provides
             the path).
+        proxy: Proxy URL ``scheme://[user:password@]host:port`` (None - direct).
+        proxy_bypass: Comma-separated hosts that skip the proxy.
     """
     config = BrowserConfig(
         block_media=block_media,
         user_data_dir=user_data_dir,
         extensions_dir=extensions_dir,
         extra_args=[f"--remote-debugging-port={remote_debugging_port}"],
+        proxy=proxy,
+        proxy_bypass=proxy_bypass,
     )
     manager = BrowserManager(config=config, logger_name="cdp")
 
@@ -109,6 +116,15 @@ def _add_launch_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--user-data-dir", default=None, help="Persistent profile (temporary by default).")
     parser.add_argument("--extensions-dir", default=None, help="Directory with unpacked extensions (none by default).")
     parser.add_argument("--show-media", action="store_true", help="Do not block media/domains.")
+    parser.add_argument(
+        "--proxy",
+        default=os.environ.get(lifecycle.PROXY_ENV_VAR),
+        help=f"Proxy URL scheme://[user:password@]host:port or scheme://host:port:user:password "
+             f"(default: ${lifecycle.PROXY_ENV_VAR}). "
+             f"Prefer the env var for credentials: command lines are visible to other processes.",
+    )
+    parser.add_argument("--proxy-bypass", default=None,
+                        help='Comma-separated hosts that skip the proxy, e.g. ".example.com,localhost".')
 
 
 def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
@@ -186,6 +202,8 @@ def _run_foreground(args: argparse.Namespace) -> int:
                 block_media=not args.show_media,
                 user_data_dir=args.user_data_dir,
                 extensions_dir=args.extensions_dir,
+                proxy=args.proxy,
+                proxy_bypass=args.proxy_bypass,
             )
         )
     logger.info("Launcher stopped.")
@@ -197,6 +215,10 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     _install_termination_handler()
     args = _parse_arguments()
+    # The proxy is read from args.proxy only; the driver and Chromium
+    # subprocesses inherit no copy of it. ``start`` passes it to its detached
+    # child explicitly.
+    os.environ.pop(lifecycle.PROXY_ENV_VAR, None)
 
     if args.command == "start":
         raise SystemExit(
@@ -208,6 +230,8 @@ def main() -> None:
                 show_media=args.show_media,
                 pid_file=args.pid_file,
                 log_file=args.log_file,
+                proxy=args.proxy,
+                proxy_bypass=args.proxy_bypass,
             )
         )
     if args.command == "stop":
